@@ -14,11 +14,7 @@ env:
   scala_212_version: "2.12.18"
   scala_213_version: "2.13.12"
   scala_3_version: "3.3.1"
-  SonatypeUrl: 'https://finos.sonatype.app/platform/'
-  SonatypeAppId: morphir-jvm
-  SonatypeStage: build
-  SonatypeScanTarget: '.'
-  ExcludeDirectory: " -X -D dirExcludes='**/website/, **/docs/, **/.*'"
+
 
 # cancel older runs of a pull request;
 # this will not cancel anything for normal git pushes
@@ -153,44 +149,16 @@ jobs:
           path: |
             out/morphir/${{matrix.scala}}/**/native/
           key: ${{ runner.os }}-mill-native-${{matrix.java}}-${{ matrix.scala }}-${{ github.sha }}-${{ hashFiles('out') }}
-    
-  sonatype-scan:
-      runs-on: ubuntu-latest
-      steps:
-      - run: |
-          # Find all *.pom files and rename them to pom.xml
-          find . -type f -name "*.pom" | while read -r file; do
-            # Extract the directory of the current file
-            dir=$(dirname "$file")
-            new_name="${dir}/pom.xml"
-            # Rename the file
-            cp "$file" "$new_name"
-            echo "\n\nCopied: $file -> $new_name"
-            cat $new_name
-          done
-      - name: Sonatype Lifecycle SCA Scan
-        uses: sonatype-nexus-community/iq-github-action@master
-        with:
-          username: ${{ secrets.sonatype_user }}
-          password: ${{ secrets.sonatype_password }}
-          serverUrl: ${{ env.SonatypeUrl }}
-          applicationId: ${{ env.SonatypeAppId }}
-          stage: ${{ env.SonatypeStage }}
-          target: ${{ env.SonatypeScanTarget }} ${{ env.ExcludeDirectory }}
 
-      - name: Upload OUT dir
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: OUT Directory
-          path: "*/out"
+      
 
   cd:    
     needs: [ci]
 
     runs-on: ubuntu-latest
+    if: always()
     # when in primary repo: all commits to main branch and all additional tags
-    if: github.repository == 'finos/morphir-jvm' && ( github.ref == 'refs/heads/main' || (github.ref != 'refs/heads/main' && startsWith( github.ref, 'refs/tags/') ) )      
+    # if: github.repository == 'finos/morphir-jvm' && ( github.ref == 'refs/heads/main' || (github.ref != 'refs/heads/main' && startsWith( github.ref, 'refs/tags/') ) )      
 
     # only run one publish job for the same sha at the same time
     # e.g. when a main-branch push is also tagged
@@ -206,6 +174,11 @@ jobs:
       LANG: "en_US.UTF-8"
       LC_MESSAGES: "en_US.UTF-8"
       LC_ALL: "en_US.UTF-8"
+      SonatypeUrl: 'https://finos.sonatype.app/platform/'
+      SonatypeAppId: morphir-jvm
+      SonatypeStage: build
+      SonatypeScanTarget: '.'
+      ExcludeDirectory: " -X -D dirExcludes='**/website/, **/docs/, **/.*'"
 
     steps:
       - uses: actions/checkout@v4
@@ -297,8 +270,38 @@ jobs:
           key: ${{ runner.os }}-mill-native-11-3.3.1-${{ github.sha }}-${{ hashFiles('out') }}
           restore-keys: ${{ runner.os }}-mill-native-11-3.3.1-${{ github.sha }}-
 
-      - name: Publish artifacts to Sonatype        
-        run: ./mill -i -j 0 io.kipp.mill.ci.release.ReleaseModule/publishAll
+      # - name: Publish artifacts to Sonatype        
+      #   run: ./mill -i -j 0 io.kipp.mill.ci.release.ReleaseModule/publishAll
+      
+      - run: ./mill -i -j 0 __.publishArtifacts
+      - run: |
+          # Find all *.pom files and rename them to pom.xml
+          find . -type f -name "*.pom" | while read -r file; do
+          # Extract the directory of the current file
+          dir=$(dirname "$file")
+          new_name="${dir}/pom.xml"
+          # Rename the file
+          cp "$file" "$new_name"
+          echo "\n\nCopied: $file -> $new_name"
+          pwd
+          # cat $new_name
+          done
+      - name: Sonatype Lifecycle SCA Scan
+        uses: sonatype-nexus-community/iq-github-action@master
+        with:
+          username: ${{ secrets.sonatype_user }}
+          password: ${{ secrets.sonatype_password }}
+          serverUrl: ${{ env.SonatypeUrl }}
+          applicationId: ${{ env.SonatypeAppId }}
+          stage: ${{ env.SonatypeStage }}
+          target: ${{ env.SonatypeScanTarget }} ${{ env.ExcludeDirectory }}
+
+      - name: Upload OUT dir
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: OUT Directory
+          path: /home/runner/work/morphir-jvm/morphir-jvm/out/
 
   ci:
     runs-on: ubuntu-latest
