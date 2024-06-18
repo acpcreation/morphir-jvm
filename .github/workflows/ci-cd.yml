@@ -14,6 +14,11 @@ env:
   scala_212_version: "2.12.18"
   scala_213_version: "2.13.12"
   scala_3_version: "3.3.1"
+  SonatypeUrl: 'https://finos.sonatype.app/platform/'
+  SonatypeAppId: morphir-jvm
+  SonatypeStage: 'build' 
+  SonatypeScanTarget: 'depCache/coursier/'
+  ExcludeDirectory: " -D fileExcludes='*.class' "
 
 
 # cancel older runs of a pull request;
@@ -150,6 +155,38 @@ jobs:
             out/morphir/${{matrix.scala}}/**/native/
           key: ${{ runner.os }}-mill-native-${{matrix.java}}-${{ matrix.scala }}-${{ github.sha }}-${{ hashFiles('out') }}
 
+############### SONATYPE SCAN ###############
+  sonatype-scan:
+    if: always()
+    needs: [ci]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Cache scala dependencies
+      uses: coursier/cache-action@v6
+        
+    - name: Copy Cache for SCA Scan
+      run: |
+        mkdir depCache/ #Create local copy of cache for Sonatype Scanner
+        cp -r /home/runner/.cache/coursier/ depCache/
+    # - name: Save resolvedIvyDeps.json
+    #   run: ./mill show __.resolvedIvyDeps > depCache/resolvedIvyDeps.json
+        
+    - name: Upload Dependency Cache (optional)
+      uses: actions/upload-artifact@v4
+      with:
+        name: Dependency Cache
+        path: depCache/
+    
+    - name: Sonatype Lifecycle SCA Scan
+      uses: sonatype-nexus-community/iq-github-action@master
+      with:
+        username: ${{ secrets.sonatype_user }}
+        password: ${{ secrets.sonatype_password }}
+        serverUrl: ${{ env.SonatypeUrl }}
+        applicationId: ${{ env.SonatypeAppId }}
+        stage: ${{ env.SonatypeStage }}
+        target: ${{ env.SonatypeScanTarget }} ${{ env.ExcludeDirectory }}
+  #############################################
       
 
   cd:    
